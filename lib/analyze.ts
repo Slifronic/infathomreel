@@ -14,7 +14,9 @@ const analysisSchema = z.object({
 const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-3.6-flash";
 
 /** Runs the reel through a video-native multimodal model to get a structured fact-check style breakdown. */
-export async function analyzeReel(videoBuffer: Buffer): Promise<ReelAnalysis> {
+export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promise<ReelAnalysis> {
+  console.log(`Analyzing video: mediaType=${mediaType} size=${videoBuffer.length} bytes model=${MODEL}`);
+
   const { object } = await generateObject({
     model: google(MODEL),
     schema: analysisSchema,
@@ -35,7 +37,7 @@ export async function analyzeReel(videoBuffer: Buffer): Promise<ReelAnalysis> {
           {
             type: "file",
             data: videoBuffer,
-            mediaType: "video/mp4",
+            mediaType,
           },
         ],
       },

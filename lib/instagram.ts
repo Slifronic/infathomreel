@@ -20,13 +20,25 @@ export function verifySignature(rawBody: string, signatureHeader: string | null,
 }
 
 /** Downloads the shared reel's video bytes from the CDN URL Meta puts in the webhook payload. */
-export async function downloadVideo(url: string): Promise<Buffer> {
+export async function downloadVideo(url: string): Promise<{ buffer: Buffer; contentType: string }> {
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to download reel video: ${res.status} ${res.statusText}`);
   }
+  const contentType = res.headers.get("content-type") ?? "unknown";
   const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
+  const buffer = Buffer.from(arrayBuffer);
+
+  console.log(`Downloaded attachment: content-type=${contentType} size=${buffer.length} bytes`);
+
+  if (!contentType.startsWith("video/")) {
+    throw new Error(
+      `Expected a video but got content-type "${contentType}" (${buffer.length} bytes). ` +
+        `First 200 bytes: ${buffer.subarray(0, 200).toString("utf-8")}`
+    );
+  }
+
+  return { buffer, contentType };
 }
 
 /** Sends a text reply back into the DM thread with the sender. */

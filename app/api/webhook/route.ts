@@ -62,8 +62,8 @@ async function processWebhook(body: IgWebhookBody) {
       try {
         await sendTextMessage(senderId, "Got it — analyzing now, one sec 🔎", accessToken);
 
-        const videoBuffer = await downloadVideo(reelAttachment.payload.url);
-        const analysis = await analyzeReel(videoBuffer);
+        const { buffer, contentType } = await downloadVideo(reelAttachment.payload.url);
+        const analysis = await analyzeReel(buffer, contentType);
         const reply = formatAnalysis(analysis);
 
         for (const chunk of chunkMessage(reply)) {
