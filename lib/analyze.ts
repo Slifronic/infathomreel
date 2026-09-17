@@ -4,38 +4,33 @@ import { z } from "zod";
 import type { ReelAnalysis } from "./types";
 
 const analysisSchema = z.object({
-  hook: z
+  summary: z.string().describe("1-2 plain sentences: what the video shows or claims. No commentary, no hooks, just what it is."),
+  tools: z
+    .array(
+      z.object({
+        name: z.string().describe("The specific, findable name of the tool, app, product, or skill — exact enough to search for and find it"),
+        description: z.string().describe("One short phrase: what it does"),
+      })
+    )
+    .describe(
+      "Every specific tool, app, product, or skill named or shown in the video — check on-screen text/UI/labels AND spoken audio independently, since a name can appear in one without the other. Empty array if the video doesn't feature a specific tool/product."
+    ),
+  verdict: z
+    .enum(["real", "fake", "uncertain"])
+    .describe(
+      "real: the tool/claim genuinely exists and works as shown. fake: fabricated, AI-generated, or the tool doesn't do what's claimed. uncertain: not enough evidence in the video alone to tell."
+    ),
+  confidence: z.number().int().min(0).max(100).describe("0-100: how confident you are in the verdict"),
+  source: z
     .string()
     .describe(
-      "1-2 sentences opening the analysis like a sharp editorial lede, not a dry summary. Name the creator/handle if it's visible on screen or said aloud."
-    ),
-  keyQuote: z
-    .string()
-    .describe(
-      "A short, notable verbatim quote or on-screen text worth showing directly (e.g. the exact prompt someone typed, a striking claim). Empty string if nothing in the video is worth quoting directly."
-    ),
-  itemsIdentified: z
-    .array(z.string())
-    .describe(
-      "Specific items the video lists or covers — tools, steps, requirements, claims, products, whatever it enumerates. Pull these from BOTH the spoken audio/narration AND any on-screen text, captions, labels, or UI shown in the frames — something can appear as an on-screen label without ever being said aloud, or be spoken without appearing on screen. Check both sources independently rather than relying on the transcript alone. Empty array if the video doesn't enumerate discrete items."
-    ),
-  breakdown: z
-    .string()
-    .describe(
-      "2-4 sentences of real analysis with a point of view: why this works or doesn't, what's actually good or questionable about it. Reference specifics from the video, not generic hedging."
-    ),
-  verdict: z.enum(["true", "false", "mixed", "unverifiable"]),
-  verdictReasoning: z.string().describe("One sentence justifying the verdict, citing the specific claim(s) if any."),
-  takeaway: z
-    .string()
-    .describe(
-      "The closing point, 1-2 sentences: what the video ultimately wants the viewer to think, feel, or do. End with a genuine observation, not a generic wrap-up line."
+      "One sentence: what the verdict is based on — e.g. 'matches publicly documented behavior of this tool', 'no independent way to verify from the video alone', 'the demo shown doesn't match how this tool actually works'."
     ),
 });
 
 const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-3.6-flash";
 
-/** Runs the reel through a video-native multimodal model to get a structured, editorial-style breakdown. */
+/** Runs the reel through a video-native multimodal model to identify tools/products it features and verify them. */
 export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promise<ReelAnalysis> {
   console.log(`Analyzing video: mediaType=${mediaType} size=${videoBuffer.length} bytes model=${MODEL}`);
 
@@ -49,12 +44,13 @@ export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promi
           {
             type: "text",
             text: [
-              "You are analyzing an Instagram Reel shared to a bot that sends back a sharp, specific breakdown — think a media-literate friend texting back their honest take, not a generic content warning.",
+              "You're analyzing an Instagram Reel for someone who saves videos about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.",
               "",
-              "Watch the full video closely: visuals, on-screen text/captions/UI, AND audio/narration are all separate sources of information. Cross-check them against each other — a video can show something on screen without saying it aloud, or vice versa. When asked to identify discrete items (tools, steps, claims, products, requirements), check both sources independently; do not assume the transcript alone covers everything shown.",
+              "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
               "",
-              "Be concrete: reference exact wording, on-screen labels, and specific moments. If the video makes no factual claims (entertainment, comedy, a recipe, a demo), say so plainly in verdictReasoning and use verdict \"unverifiable\" — don't force a true/false judgment onto something that isn't a claim.",
-              "Write with an actual point of view, not hedged neutrality.",
+              "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other.",
+              "",
+              "If no specific tool or product is shown, return an empty tools array and set verdict/confidence/source based on whatever factual claim (if any) the video makes instead.",
             ].join("\n"),
           },
           {
@@ -70,30 +66,18 @@ export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promi
   return object;
 }
 
-/** Formats the structured analysis into plain text for Instagram DMs (no markdown rendering there). */
+/** Formats the structured analysis into plain, skimmable text for Instagram DMs. */
 export function formatAnalysis(a: ReelAnalysis): string {
-  const lines: string[] = [a.hook];
+  const lines: string[] = [a.summary];
 
-  if (a.keyQuote) {
-    lines.push("", `"${a.keyQuote}"`);
+  if (a.tools.length > 0) {
+    lines.push("", "Tools:");
+    for (const t of a.tools) lines.push(`• ${t.name} — ${t.description}`);
   }
 
-  if (a.itemsIdentified.length > 0) {
-    lines.push("", "What it covers:");
-    for (const item of a.itemsIdentified) lines.push(`• ${item}`);
-  }
-
-  lines.push("", a.breakdown);
-
-  const verdictLabel = {
-    true: "Checks out",
-    false: "Doesn't check out",
-    mixed: "Partly true",
-    unverifiable: "Not a factual claim",
-  }[a.verdict];
-  lines.push("", `${verdictLabel} — ${a.verdictReasoning}`);
-
-  lines.push("", a.takeaway);
+  const verdictLabel = { real: "Real", fake: "Fake", uncertain: "Uncertain" }[a.verdict];
+  lines.push("", `Verdict: ${verdictLabel} (${a.confidence}% confidence)`);
+  lines.push(`Source: ${a.source}`);
 
   return lines.join("\n");
 }

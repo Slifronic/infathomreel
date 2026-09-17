@@ -33,12 +33,15 @@ export interface IgWebhookBody {
   entry: IgWebhookEntry[];
 }
 
+export interface ToolMention {
+  name: string;
+  description: string;
+}
+
 export interface ReelAnalysis {
-  hook: string;
-  keyQuote: string;
-  itemsIdentified: string[];
-  breakdown: string;
-  verdict: "true" | "false" | "mixed" | "unverifiable";
-  verdictReasoning: string;
-  takeaway: string;
+  summary: string;
+  tools: ToolMention[];
+  verdict: "real" | "fake" | "uncertain";
+  confidence: number;
+  source: string;
 }
