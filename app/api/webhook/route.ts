@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = JSON.parse(rawBody) as IgWebhookBody;
+  console.log("Incoming webhook body:", JSON.stringify(body, null, 2));
 
   // Ack immediately — Meta retries aggressively if it doesn't get a fast 200.
   // The actual video download + analysis + reply happens after we return.
