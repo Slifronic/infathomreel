@@ -1,5 +1,5 @@
 import { generateObject } from "ai";
-import { gateway } from "@ai-sdk/gateway";
+import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import type { ReelAnalysis } from "./types";
 
@@ -11,12 +11,12 @@ const analysisSchema = z.object({
   purpose: z.string().describe("The video's core point in one or two sentences: what it wants the viewer to think, feel, or do"),
 });
 
-const MODEL = process.env.ANALYSIS_MODEL ?? "google/gemini-2.5-flash";
+const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-2.5-flash";
 
 /** Runs the reel through a video-native multimodal model to get a structured fact-check style breakdown. */
 export async function analyzeReel(videoBuffer: Buffer): Promise<ReelAnalysis> {
   const { object } = await generateObject({
-    model: gateway(MODEL),
+    model: google(MODEL),
     schema: analysisSchema,
     messages: [
       {
