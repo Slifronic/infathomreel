@@ -7,7 +7,7 @@ import type { IgWebhookBody } from "@/lib/types";
 // Attachment types Meta has been observed sending for a DM'd Reel/post share.
 // Confirm against real payloads in your own webhook logs (Vercel function logs)
 // and extend this list if a variant shows up that isn't caught here.
-const REEL_ATTACHMENT_TYPES = new Set(["share", "video", "ig_reel", "reel"]);
+const REEL_ATTACHMENT_TYPES = new Set(["share", "video", "ig_reel", "reel", "ig_post"]);
 
 // yt-dlp retries (up to ~3min worst case) plus Gemini analysis need real headroom.
 export const maxDuration = 300;
