@@ -91,7 +91,7 @@ shortly after.
   documented and has shifted across API versions — check your Vercel function
   logs on the first real test and adjust `REEL_ATTACHMENT_TYPES` in
   `app/api/webhook/route.ts` if nothing fires.
-- `ANALYSIS_MODEL` must support video input. `gemini-2.5-flash` (the default,
+- `ANALYSIS_MODEL` must support video input. `gemini-3.6-flash` (the default,
   called directly via `@ai-sdk/google` — not Vercel AI Gateway, which requires
   a card on file even for free-tier usage) does; swap it if you want a
   different model.

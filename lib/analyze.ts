@@ -11,7 +11,7 @@ const analysisSchema = z.object({
   purpose: z.string().describe("The video's core point in one or two sentences: what it wants the viewer to think, feel, or do"),
 });
 
-const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-2.5-flash";
+const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-3.6-flash";
 
 /** Runs the reel through a video-native multimodal model to get a structured fact-check style breakdown. */
 export async function analyzeReel(videoBuffer: Buffer): Promise<ReelAnalysis> {
