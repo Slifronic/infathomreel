@@ -1,12 +1,12 @@
 # InfathomReel
 
-DM a Reel to `@reelcheck.ai` and get back an analysis: true/false verdict, what's
+DM a Reel to `@infathomreel.ai` and get back an analysis: true/false verdict, what's
 questionable, what resources it points to, and what the video is actually trying
 to say.
 
 ## How it works
 
-1. Someone shares a Reel to `@reelcheck.ai`'s Instagram DMs.
+1. Someone shares a Reel to `@infathomreel.ai`'s Instagram DMs.
 2. Meta POSTs the message event to `/api/webhook` (this app).
 3. The webhook acks immediately, then in the background:
    - downloads the video from the CDN URL in the message payload
@@ -22,7 +22,7 @@ No copy-pasting links, no manual triggering — sharing the Reel *is* the trigge
 Instagram's Messaging API only exposes DMs sent to **Business or Creator**
 accounts — personal accounts aren't visible to the API at all.
 
-In the `@reelcheck.ai` account: Settings → Account type and tools → Switch to
+In the `@infathomreel.ai` account: Settings → Account type and tools → Switch to
 Professional Account → Creator.
 
 ### 2. Create a Meta app
@@ -32,19 +32,19 @@ Professional Account → Creator.
   with Instagram Login" — this is the current path that doesn't require
   linking a Facebook Page).
 
-### 3. Add `@reelcheck.ai` as a tester on your own app
+### 3. Add `@infathomreel.ai` as a tester on your own app
 
 Since this is just for your own account, you don't need Meta's full App
 Review — adding the account as a role on your app is enough:
 
-- App dashboard → App roles → Roles → add `@reelcheck.ai` as an **Instagram Tester**.
-- Log into `@reelcheck.ai` on Instagram → Settings → Apps and websites → Tester
+- App dashboard → App roles → Roles → add `@infathomreel.ai` as an **Instagram Tester**.
+- Log into `@infathomreel.ai` on Instagram → Settings → Apps and websites → Tester
   invites → **accept** the invite from your app.
 
 ### 4. Generate a long-lived access token
 
 - In the app's Instagram product settings, use the "Generate token" flow for
-  Instagram Login, authenticating as `@reelcheck.ai`.
+  Instagram Login, authenticating as `@infathomreel.ai`.
 - Required scopes: `instagram_business_basic`, `instagram_business_manage_messages`
   (exact scope names occasionally shift — the token generation UI will list
   what's currently required).
@@ -77,7 +77,7 @@ this app's `GET /api/webhook` handles that automatically.
 
 ### 7. Test it
 
-DM any Reel to `@reelcheck.ai` from a normal account. You should get an
+DM any Reel to `@infathomreel.ai` from a normal account. You should get an
 acknowledgment message within a second or two, then the full analysis
 shortly after.
 
