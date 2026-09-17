@@ -1,36 +1,95 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Reelcheck
 
-## Getting Started
+DM a Reel to `@reelcheck.ai` and get back an analysis: true/false verdict, what's
+questionable, what resources it points to, and what the video is actually trying
+to say.
 
-First, run the development server:
+## How it works
+
+1. Someone shares a Reel to `@reelcheck.ai`'s Instagram DMs.
+2. Meta POSTs the message event to `/api/webhook` (this app).
+3. The webhook acks immediately, then in the background:
+   - downloads the video from the CDN URL in the message payload
+   - sends it to a video-capable model (via Vercel AI Gateway) for structured analysis
+   - replies in the same DM thread with the result
+
+No copy-pasting links, no manual triggering — sharing the Reel *is* the trigger.
+
+## One-time setup (do this before deploying)
+
+### 1. Convert the secondary account to Creator
+
+Instagram's Messaging API only exposes DMs sent to **Business or Creator**
+accounts — personal accounts aren't visible to the API at all.
+
+In the `@reelcheck.ai` account: Settings → Account type and tools → Switch to
+Professional Account → Creator.
+
+### 2. Create a Meta app
+
+- Go to [developers.facebook.com/apps](https://developers.facebook.com/apps) → Create App → type "Other" → "Business".
+- In the app dashboard, add the **Instagram** product (look for "Instagram API
+  with Instagram Login" — this is the current path that doesn't require
+  linking a Facebook Page).
+
+### 3. Add `@reelcheck.ai` as a tester on your own app
+
+Since this is just for your own account, you don't need Meta's full App
+Review — adding the account as a role on your app is enough:
+
+- App dashboard → App roles → Roles → add `@reelcheck.ai` as an **Instagram Tester**.
+- Log into `@reelcheck.ai` on Instagram → Settings → Apps and websites → Tester
+  invites → **accept** the invite from your app.
+
+### 4. Generate a long-lived access token
+
+- In the app's Instagram product settings, use the "Generate token" flow for
+  Instagram Login, authenticating as `@reelcheck.ai`.
+- Required scopes: `instagram_business_basic`, `instagram_business_manage_messages`
+  (exact scope names occasionally shift — the token generation UI will list
+  what's currently required).
+- Exchange the short-lived token it gives you for a long-lived one (60 days,
+  refreshable) via the `/access_token` refresh endpoint documented on the same
+  page. Put the long-lived token in `IG_PAGE_ACCESS_TOKEN`.
+
+### 5. Deploy this app to Vercel first
+
+You need a live URL before Meta will let you save a webhook subscription.
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+vercel deploy
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then set the env vars from `.env.example` in the Vercel project settings
+(`IG_APP_SECRET`, `IG_VERIFY_TOKEN` — make this one up yourself — and
+`IG_PAGE_ACCESS_TOKEN`), and redeploy so they take effect.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 6. Configure the webhook
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Back in the Meta app's Instagram product → Webhooks:
 
-## Learn More
+- Callback URL: `https://<your-vercel-domain>/api/webhook`
+- Verify token: the same string you put in `IG_VERIFY_TOKEN`
+- Subscribe to the **`messages`** field
 
-To learn more about Next.js, take a look at the following resources:
+Meta will hit the callback URL with a GET request to confirm you control it —
+this app's `GET /api/webhook` handles that automatically.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 7. Test it
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+DM any Reel to `@reelcheck.ai` from a normal account. You should get an
+acknowledgment message within a second or two, then the full analysis
+shortly after.
 
-## Deploy on Vercel
+## Notes / limitations
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Anyone** who DMs a Reel to the account gets analyzed — there's no sender
+  allowlist. Add one in `app/api/webhook/route.ts` if you want to restrict it.
+- Instagram DMs cap out around 1000 characters; long analyses are split across
+  multiple messages automatically (`chunkMessage` in `lib/instagram.ts`).
+- The attachment `type` Meta sends for a shared Reel isn't perfectly
+  documented and has shifted across API versions — check your Vercel function
+  logs on the first real test and adjust `REEL_ATTACHMENT_TYPES` in
+  `app/api/webhook/route.ts` if nothing fires.
+- `ANALYSIS_MODEL` must support video input. `google/gemini-2.5-flash` (the
+  default, via Vercel AI Gateway) does; swap it if you want a different model.
