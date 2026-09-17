@@ -66,12 +66,21 @@ async function processWebhook(body: IgWebhookBody) {
       try {
         await sendTextMessage(senderId, "Got it — analyzing now, one sec 🔎", accessToken);
 
-        // ig_post's payload.url is only the carousel's cover slide — for the full
-        // set, rebuild the real permalink from the media ID and let yt-dlp walk it.
+        // ig_post's payload.url is only the carousel's cover slide. For the full set,
+        // rebuild the real permalink from the media ID and let yt-dlp walk it — but
+        // that permalink is derived, not given to us, so if it's wrong or Instagram
+        // blocks it, fall back to analyzing just the cover slide rather than failing
+        // outright.
         let media: MediaItem[];
         if (reelAttachment.type === "ig_post" && reelAttachment.payload.ig_post_media_id) {
-          const slides = await downloadCarouselMedia(reelAttachment.payload.ig_post_media_id);
-          media = slides.map((s) => ({ buffer: s.buffer, mediaType: s.contentType }));
+          try {
+            const slides = await downloadCarouselMedia(reelAttachment.payload.ig_post_media_id);
+            media = slides.map((s) => ({ buffer: s.buffer, mediaType: s.contentType }));
+          } catch (carouselErr) {
+            console.error("Carousel resolution failed, falling back to cover slide only", carouselErr);
+            const { buffer, contentType } = await downloadMedia(reelAttachment.payload.url);
+            media = [{ buffer, mediaType: contentType }];
+          }
         } else {
           const { buffer, contentType } = await downloadMedia(reelAttachment.payload.url);
           media = [{ buffer, mediaType: contentType }];

@@ -64,10 +64,13 @@ export async function downloadMedia(url: string): Promise<{ buffer: Buffer; cont
   return { buffer, contentType };
 }
 
-// Instagram's shortcode is a bijective base-64 encoding (their own alphabet,
-// no padding) of the numeric media ID. This is a stable, widely-documented
-// conversion — not guesswork — and is how a media ID becomes a real
-// instagram.com/p/<shortcode>/ permalink. Media IDs can exceed
+// Commonly-cited scheme for converting Instagram's numeric media ID into its
+// shortcode: a bijective base-64 encoding using Instagram's own alphabet. NOT
+// independently verified — a test against a real (media ID, shortcode) pair
+// we had ground truth for did not match, so this may only work for some ID
+// ranges/media types, or may be wrong outright. Treat its output as a best
+// guess; downloadCarouselMedia() below falls back to the single cover slide
+// when yt-dlp can't resolve the derived permalink. Media IDs can exceed
 // Number.MAX_SAFE_INTEGER, hence BigInt throughout.
 const SHORTCODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
