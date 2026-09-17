@@ -19,79 +19,31 @@ export function verifySignature(rawBody: string, signatureHeader: string | null,
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
-/**
- * Resolves a `reel_video_id` from a DM'd Reel share into a direct, downloadable
- * media URL via the authorized Graph API — no scraping needed, since Meta
- * exposes shared-in-DM media through this endpoint for the receiving app.
- */
-export async function resolveReelMediaUrl(reelVideoId: string, accessToken: string): Promise<string> {
-  const res = await fetch(
-    `${GRAPH_BASE}/${reelVideoId}?fields=media_url,media_type,permalink&access_token=${encodeURIComponent(accessToken)}`
-  );
-  const body = await res.text();
-  console.log(`Graph API media lookup for ${reelVideoId}: ${res.status} ${body}`);
+const IG_PERMALINK_PATTERN = /instagram\.com\/(reel|p|tv)\//;
 
-  if (!res.ok) {
-    throw new Error(`Failed to resolve reel media via Graph API: ${res.status} ${body}`);
-  }
-
-  const data = JSON.parse(body) as { media_url?: string; media_type?: string };
-  if (!data.media_url) {
-    throw new Error(`Graph API returned no media_url for ${reelVideoId}: ${body}`);
-  }
-
-  return data.media_url;
+/** This deployment's own origin, for calling the internal yt-dlp resolver function. */
+function internalOrigin(): string {
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
 }
 
-// Instagram serves rich Open Graph video tags to known crawlers (this is how
-// link previews work inside Messenger/Instagram itself) but a bare fetch
-// with no User-Agent gets a stripped-down page with no video reference.
-const CRAWLER_USER_AGENT = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
-
-/** Pulls the actual video URL out of an Instagram permalink page's Open Graph / embedded JSON metadata. */
-function extractVideoUrlFromHtml(html: string): string | null {
-  const ogVideoMatch = html.match(/<meta property="og:video:secure_url" content="([^"]+)"/)
-    ?? html.match(/<meta property="og:video" content="([^"]+)"/);
-  if (ogVideoMatch) {
-    return ogVideoMatch[1].replace(/&amp;/g, "&");
-  }
-
-  // Fallback: Instagram embeds the raw media graph in a script tag as JSON
-  // with escaped slashes/unicode — unescape before using.
-  const jsonMatch = html.match(/"video_url":"(https:[^"]+?)"/);
-  if (jsonMatch) {
-    return jsonMatch[1].replace(/\\u0026/g, "&").replace(/\\\//g, "/");
-  }
-
-  return null;
-}
-
-/** Downloads the shared reel's video bytes. Meta's `share` attachment gives a permalink page,
- * not a direct video file, so this resolves that page to the real video URL first. */
+/** Downloads the shared reel's video bytes. Meta's `ig_reel`/`share` attachments give an
+ * Instagram permalink page, not a direct video file, and Instagram blocks plain server-side
+ * scraping of that page — so permalinks are routed through the yt-dlp resolver function
+ * (api/resolve-reel.py) instead, which handles Instagram's anti-bot measures properly. */
 export async function downloadVideo(url: string): Promise<{ buffer: Buffer; contentType: string }> {
-  let res = await fetch(url, { headers: { "User-Agent": CRAWLER_USER_AGENT } });
+  const isPermalink = IG_PERMALINK_PATTERN.test(url);
+  const fetchUrl = isPermalink
+    ? `${internalOrigin()}/api/resolve-reel?url=${encodeURIComponent(url)}`
+    : url;
+
+  const res = await fetch(fetchUrl);
   if (!res.ok) {
-    throw new Error(`Failed to download reel video: ${res.status} ${res.statusText}`);
-  }
-  let contentType = res.headers.get("content-type") ?? "unknown";
-
-  if (contentType.startsWith("text/html")) {
-    const html = await res.text();
-    const videoUrl = extractVideoUrlFromHtml(html);
-    if (!videoUrl) {
-      throw new Error(
-        `Got an HTML permalink page instead of a video and couldn't find an embedded video URL. ` +
-          `First 300 bytes: ${html.slice(0, 300)}`
-      );
-    }
-    console.log(`Resolved permalink to video URL: ${videoUrl}`);
-    res = await fetch(videoUrl, { headers: { "User-Agent": CRAWLER_USER_AGENT } });
-    if (!res.ok) {
-      throw new Error(`Failed to download resolved video URL: ${res.status} ${res.statusText}`);
-    }
-    contentType = res.headers.get("content-type") ?? "unknown";
+    const detail = await res.text();
+    throw new Error(`Failed to download reel video: ${res.status} ${detail.slice(0, 500)}`);
   }
 
+  const contentType = res.headers.get("content-type") ?? "unknown";
   const arrayBuffer = await res.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
