@@ -3,6 +3,7 @@ export interface IgAttachment {
   payload: {
     url?: string;
     title?: string;
+    reel_video_id?: string;
   };
 }
 
@@ -10,6 +11,8 @@ export interface IgMessage {
   mid: string;
   text?: string;
   attachments?: IgAttachment[];
+  is_echo?: boolean;
+  is_deleted?: boolean;
 }
 
 export interface IgMessagingEvent {

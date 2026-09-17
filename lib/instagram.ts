@@ -19,6 +19,30 @@ export function verifySignature(rawBody: string, signatureHeader: string | null,
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/**
+ * Resolves a `reel_video_id` from a DM'd Reel share into a direct, downloadable
+ * media URL via the authorized Graph API — no scraping needed, since Meta
+ * exposes shared-in-DM media through this endpoint for the receiving app.
+ */
+export async function resolveReelMediaUrl(reelVideoId: string, accessToken: string): Promise<string> {
+  const res = await fetch(
+    `${GRAPH_BASE}/${reelVideoId}?fields=media_url,media_type,permalink&access_token=${encodeURIComponent(accessToken)}`
+  );
+  const body = await res.text();
+  console.log(`Graph API media lookup for ${reelVideoId}: ${res.status} ${body}`);
+
+  if (!res.ok) {
+    throw new Error(`Failed to resolve reel media via Graph API: ${res.status} ${body}`);
+  }
+
+  const data = JSON.parse(body) as { media_url?: string; media_type?: string };
+  if (!data.media_url) {
+    throw new Error(`Graph API returned no media_url for ${reelVideoId}: ${body}`);
+  }
+
+  return data.media_url;
+}
+
 // Instagram serves rich Open Graph video tags to known crawlers (this is how
 // link previews work inside Messenger/Instagram itself) but a bare fetch
 // with no User-Agent gets a stripped-down page with no video reference.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { verifySignature, downloadVideo, sendTextMessage, chunkMessage } from "@/lib/instagram";
+import { verifySignature, downloadVideo, resolveReelMediaUrl, sendTextMessage, chunkMessage } from "@/lib/instagram";
 import { analyzeReel, formatAnalysis } from "@/lib/analyze";
 import type { IgWebhookBody } from "@/lib/types";
 
@@ -51,19 +51,25 @@ async function processWebhook(body: IgWebhookBody) {
   for (const entry of body.entry ?? []) {
     for (const event of entry.messaging ?? []) {
       const message = event.message;
-      if (!message?.attachments?.length) continue;
+      if (!message || message.is_echo || !message.attachments?.length) continue;
 
       const reelAttachment = message.attachments.find(
-        (a) => REEL_ATTACHMENT_TYPES.has(a.type) && a.payload?.url
+        (a) => REEL_ATTACHMENT_TYPES.has(a.type) && (a.payload?.reel_video_id || a.payload?.url)
       );
-      if (!reelAttachment?.payload.url) continue;
+      if (!reelAttachment) continue;
 
       const senderId = event.sender.id;
 
       try {
         await sendTextMessage(senderId, "Got it — analyzing now, one sec 🔎", accessToken);
 
-        const { buffer, contentType } = await downloadVideo(reelAttachment.payload.url);
+        // Prefer the authorized Graph API resolution over scraping the public
+        // permalink page — Instagram blocks the latter for non-browser requests.
+        const mediaUrl = reelAttachment.payload.reel_video_id
+          ? await resolveReelMediaUrl(reelAttachment.payload.reel_video_id, accessToken)
+          : reelAttachment.payload.url!;
+
+        const { buffer, contentType } = await downloadVideo(mediaUrl);
         const analysis = await analyzeReel(buffer, contentType);
         const reply = formatAnalysis(analysis);
 
