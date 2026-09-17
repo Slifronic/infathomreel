@@ -21,8 +21,11 @@ export function verifySignature(rawBody: string, signatureHeader: string | null,
 
 const IG_PERMALINK_PATTERN = /instagram\.com\/(reel|p|tv)\//;
 
-/** This deployment's own origin, for calling the internal yt-dlp resolver function. */
+/** This deployment's own origin, for calling the internal yt-dlp resolver function.
+ * VERCEL_URL points at the per-deployment hashed URL, which is gated behind Vercel's
+ * own auth wall by default — use the stable production alias instead. */
 function internalOrigin(): string {
+  if (process.env.VERCEL_PROJECT_PRODUCTION_URL) return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
   if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
   return "http://localhost:3000";
 }
