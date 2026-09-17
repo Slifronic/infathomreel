@@ -9,6 +9,9 @@ import type { IgWebhookBody } from "@/lib/types";
 // and extend this list if a variant shows up that isn't caught here.
 const REEL_ATTACHMENT_TYPES = new Set(["share", "video", "ig_reel", "reel"]);
 
+// yt-dlp retries (up to ~3min worst case) plus Gemini analysis need real headroom.
+export const maxDuration = 300;
+
 /** Meta's one-time subscription handshake: echo back the challenge if the verify token matches. */
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;

@@ -11,8 +11,15 @@ from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import subprocess
 import tempfile
+import time
 import os
 import sys
+
+# Instagram intermittently returns an empty media response to yt-dlp even for
+# a post that resolves fine moments later (confirmed by retesting the same
+# URL back-to-back) — retry a few times before giving up.
+MAX_ATTEMPTS = 3
+RETRY_DELAY_SECONDS = 2
 
 
 class handler(BaseHTTPRequestHandler):
@@ -23,37 +30,45 @@ class handler(BaseHTTPRequestHandler):
             self._error(400, "Missing url parameter")
             return
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            out_path = os.path.join(tmpdir, "video.mp4")
-            try:
-                result = subprocess.run(
-                    [
-                        sys.executable, "-m", "yt_dlp",
-                        "-f", "best[ext=mp4]/best",
-                        "--no-playlist",
-                        "-o", out_path,
-                        url,
-                    ],
-                    capture_output=True,
-                    text=True,
-                    timeout=90,
-                )
-            except subprocess.TimeoutExpired:
-                self._error(504, "yt-dlp timed out")
+        last_error = ""
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = os.path.join(tmpdir, "video.mp4")
+                try:
+                    result = subprocess.run(
+                        [
+                            sys.executable, "-m", "yt_dlp",
+                            "-f", "best[ext=mp4]/best",
+                            "--no-playlist",
+                            "-o", out_path,
+                            url,
+                        ],
+                        capture_output=True,
+                        text=True,
+                        timeout=60,
+                    )
+                except subprocess.TimeoutExpired:
+                    last_error = "yt-dlp timed out"
+                    continue
+
+                if result.returncode != 0 or not os.path.exists(out_path):
+                    last_error = result.stderr[-1500:]
+                    print(f"Attempt {attempt}/{MAX_ATTEMPTS} failed: {last_error}")
+                    if attempt < MAX_ATTEMPTS:
+                        time.sleep(RETRY_DELAY_SECONDS)
+                    continue
+
+                with open(out_path, "rb") as f:
+                    data = f.read()
+
+                self.send_response(200)
+                self.send_header("Content-Type", "video/mp4")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
                 return
 
-            if result.returncode != 0 or not os.path.exists(out_path):
-                self._error(502, f"yt-dlp failed: {result.stderr[-1500:]}")
-                return
-
-            with open(out_path, "rb") as f:
-                data = f.read()
-
-        self.send_response(200)
-        self.send_header("Content-Type", "video/mp4")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+        self._error(502, f"yt-dlp failed after {MAX_ATTEMPTS} attempts: {last_error}")
 
     def _error(self, code: int, message: str) -> None:
         self.send_response(code)
