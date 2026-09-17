@@ -30,11 +30,13 @@ function internalOrigin(): string {
   return "http://localhost:3000";
 }
 
-/** Downloads the shared reel's video bytes. Meta's `ig_reel`/`share` attachments give an
- * Instagram permalink page, not a direct video file, and Instagram blocks plain server-side
- * scraping of that page — so permalinks are routed through the yt-dlp resolver function
- * (api/resolve-reel.py) instead, which handles Instagram's anti-bot measures properly. */
-export async function downloadVideo(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+/** Downloads the shared media's bytes — video for a Reel, image for a static post/carousel.
+ * Meta's `ig_reel`/`share` attachments give an Instagram permalink page, not a direct video
+ * file, and Instagram blocks plain server-side scraping of that page — so permalinks are
+ * routed through the yt-dlp resolver function (api/resolve-reel.py) instead, which handles
+ * Instagram's anti-bot measures properly. `ig_post` attachments (image posts, carousels) give
+ * a direct lookaside.fbsbx.com CDN link that can be fetched as-is. */
+export async function downloadMedia(url: string): Promise<{ buffer: Buffer; contentType: string }> {
   const isPermalink = IG_PERMALINK_PATTERN.test(url);
   const fetchUrl = isPermalink
     ? `${internalOrigin()}/api/resolve-reel?url=${encodeURIComponent(url)}`
@@ -43,18 +45,18 @@ export async function downloadVideo(url: string): Promise<{ buffer: Buffer; cont
   const res = await fetch(fetchUrl);
   if (!res.ok) {
     const detail = await res.text();
-    throw new Error(`Failed to download reel video: ${res.status} ${detail.slice(0, 500)}`);
+    throw new Error(`Failed to download media: ${res.status} ${detail.slice(0, 500)}`);
   }
 
   const contentType = res.headers.get("content-type") ?? "unknown";
   const arrayBuffer = await res.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
-  console.log(`Downloaded video: content-type=${contentType} size=${buffer.length} bytes`);
+  console.log(`Downloaded media: content-type=${contentType} size=${buffer.length} bytes`);
 
-  if (!contentType.startsWith("video/")) {
+  if (!contentType.startsWith("video/") && !contentType.startsWith("image/")) {
     throw new Error(
-      `Expected a video but got content-type "${contentType}" (${buffer.length} bytes). ` +
+      `Expected a video or image but got content-type "${contentType}" (${buffer.length} bytes). ` +
         `First 200 bytes: ${buffer.subarray(0, 200).toString("utf-8")}`
     );
   }

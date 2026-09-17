@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { ReelAnalysis } from "./types";
 
 const analysisSchema = z.object({
-  summary: z.string().describe("1-2 plain sentences: what the video shows or claims. No commentary, no hooks, just what it is."),
+  summary: z.string().describe("1-2 plain sentences: what the content shows or claims. No commentary, no hooks, just what it is."),
   tools: z
     .array(
       z.object({
@@ -13,7 +13,7 @@ const analysisSchema = z.object({
       })
     )
     .describe(
-      "Every specific tool, app, product, or skill named or shown in the video — check on-screen text/UI/labels AND spoken audio independently, since a name can appear in one without the other. Empty array if the video doesn't feature a specific tool/product."
+      "Every specific tool, app, product, or skill named or shown — check on-screen text/UI/labels AND spoken audio (if present) independently, since a name can appear in one without the other. Empty array if it doesn't feature a specific tool/product."
     ),
   verdict: z
     .enum(["real", "fake", "uncertain"])
@@ -30,9 +30,11 @@ const analysisSchema = z.object({
 
 const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-3.6-flash";
 
-/** Runs the reel through a video-native multimodal model to identify tools/products it features and verify them. */
-export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promise<ReelAnalysis> {
-  console.log(`Analyzing video: mediaType=${mediaType} size=${videoBuffer.length} bytes model=${MODEL}`);
+/** Runs the shared content (video Reel or static image post) through a multimodal model
+ * to identify tools/products it features and verify them. */
+export async function analyzeReel(mediaBuffer: Buffer, mediaType: string): Promise<ReelAnalysis> {
+  const kind = mediaType.startsWith("image/") ? "image" : "video";
+  console.log(`Analyzing ${kind}: mediaType=${mediaType} size=${mediaBuffer.length} bytes model=${MODEL}`);
 
   const { object } = await generateObject({
     model: google(MODEL),
@@ -44,18 +46,20 @@ export async function analyzeReel(videoBuffer: Buffer, mediaType: string): Promi
           {
             type: "text",
             text: [
-              "You're analyzing an Instagram Reel for someone who saves videos about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.",
+              `You're analyzing an Instagram ${kind === "image" ? "post (a static image, possibly a listicle/infographic)" : "Reel"} for someone who saves content about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.`,
               "",
               "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
               "",
-              "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other.",
+              kind === "image"
+                ? "Read every piece of on-screen text carefully — listicle graphics often pack many tool names into small labels or a numbered list."
+                : "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other.",
               "",
-              "If no specific tool or product is shown, return an empty tools array and set verdict/confidence/source based on whatever factual claim (if any) the video makes instead.",
+              `If no specific tool or product is shown, return an empty tools array and set verdict/confidence/source based on whatever factual claim (if any) the ${kind} makes instead.`,
             ].join("\n"),
           },
           {
             type: "file",
-            data: videoBuffer,
+            data: mediaBuffer,
             mediaType,
           },
         ],

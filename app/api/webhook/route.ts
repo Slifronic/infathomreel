@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { verifySignature, downloadVideo, sendTextMessage, chunkMessage } from "@/lib/instagram";
+import { verifySignature, downloadMedia, sendTextMessage, chunkMessage } from "@/lib/instagram";
 import { analyzeReel, formatAnalysis } from "@/lib/analyze";
 import type { IgWebhookBody } from "@/lib/types";
 
@@ -66,7 +66,7 @@ async function processWebhook(body: IgWebhookBody) {
       try {
         await sendTextMessage(senderId, "Got it — analyzing now, one sec 🔎", accessToken);
 
-        const { buffer, contentType } = await downloadVideo(reelAttachment.payload.url);
+        const { buffer, contentType } = await downloadMedia(reelAttachment.payload.url);
         const analysis = await analyzeReel(buffer, contentType);
         const reply = formatAnalysis(analysis);
 
@@ -77,7 +77,7 @@ async function processWebhook(body: IgWebhookBody) {
         console.error("Failed to process reel", err);
         await sendTextMessage(
           senderId,
-          "Couldn't analyze that one — the video link may have expired or the format wasn't supported. Try resharing it.",
+          "Couldn't analyze that one — the link may have expired or the format wasn't supported. Try resharing it.",
           accessToken
         ).catch(() => {});
       }
