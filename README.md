@@ -1,4 +1,4 @@
-# Reelcheck
+# InfathomReel
 
 DM a Reel to `@reelcheck.ai` and get back an analysis: true/false verdict, what's
 questionable, what resources it points to, and what the video is actually trying
