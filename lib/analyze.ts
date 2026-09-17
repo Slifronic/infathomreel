@@ -30,11 +30,26 @@ const analysisSchema = z.object({
 
 const MODEL = process.env.ANALYSIS_MODEL ?? "gemini-3.6-flash";
 
-/** Runs the shared content (video Reel or static image post) through a multimodal model
- * to identify tools/products it features and verify them. */
-export async function analyzeReel(mediaBuffer: Buffer, mediaType: string): Promise<ReelAnalysis> {
-  const kind = mediaType.startsWith("image/") ? "image" : "video";
-  console.log(`Analyzing ${kind}: mediaType=${mediaType} size=${mediaBuffer.length} bytes model=${MODEL}`);
+export interface MediaItem {
+  buffer: Buffer;
+  mediaType: string;
+}
+
+/** Runs the shared content — a video Reel, a single image post, or every slide of a
+ * carousel post together — through a multimodal model to identify tools/products it
+ * features and verify them. Carousel slides are sent as separate file parts in the same
+ * message so the model reads them as one connected post, not isolated images. */
+export async function analyzeReel(media: MediaItem[]): Promise<ReelAnalysis> {
+  const hasVideo = media.some((m) => m.mediaType.startsWith("video/"));
+  const kind = hasVideo ? "video" : media.length > 1 ? "carousel" : "image";
+  const totalSize = media.reduce((sum, m) => sum + m.buffer.length, 0);
+  console.log(`Analyzing ${kind}: ${media.length} item(s), ${totalSize} bytes total, model=${MODEL}`);
+
+  const kindDescription = {
+    video: "Reel",
+    image: "post (a static image, possibly a listicle/infographic)",
+    carousel: `carousel post (${media.length} slides — read them as one connected post, in order)`,
+  }[kind];
 
   const { object } = await generateObject({
     model: google(MODEL),
@@ -46,22 +61,22 @@ export async function analyzeReel(mediaBuffer: Buffer, mediaType: string): Promi
           {
             type: "text",
             text: [
-              `You're analyzing an Instagram ${kind === "image" ? "post (a static image, possibly a listicle/infographic)" : "Reel"} for someone who saves content about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.`,
+              `You're analyzing an Instagram ${kindDescription} for someone who saves content about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.`,
               "",
               "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
               "",
-              kind === "image"
-                ? "Read every piece of on-screen text carefully — listicle graphics often pack many tool names into small labels or a numbered list."
-                : "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other.",
+              kind === "video"
+                ? "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other."
+                : "Read every piece of on-screen text carefully across every slide — listicle graphics often pack many tool names into small labels or a numbered list, sometimes one item per slide.",
               "",
               `If no specific tool or product is shown, return an empty tools array and set verdict/confidence/source based on whatever factual claim (if any) the ${kind} makes instead.`,
             ].join("\n"),
           },
-          {
-            type: "file",
-            data: mediaBuffer,
-            mediaType,
-          },
+          ...media.map((m) => ({
+            type: "file" as const,
+            data: m.buffer,
+            mediaType: m.mediaType,
+          })),
         ],
       },
     ],

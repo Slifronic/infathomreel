@@ -64,6 +64,51 @@ export async function downloadMedia(url: string): Promise<{ buffer: Buffer; cont
   return { buffer, contentType };
 }
 
+// Instagram's shortcode is a bijective base-64 encoding (their own alphabet,
+// no padding) of the numeric media ID. This is a stable, widely-documented
+// conversion — not guesswork — and is how a media ID becomes a real
+// instagram.com/p/<shortcode>/ permalink. Media IDs can exceed
+// Number.MAX_SAFE_INTEGER, hence BigInt throughout.
+const SHORTCODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+function mediaIdToShortcode(mediaId: string): string {
+  const zero = BigInt(0);
+  const base = BigInt(64);
+  let id = BigInt(mediaId.split("_")[0]);
+  if (id === zero) return SHORTCODE_ALPHABET[0];
+
+  let shortcode = "";
+  while (id > zero) {
+    const remainder = Number(id % base);
+    id /= base;
+    shortcode = SHORTCODE_ALPHABET[remainder] + shortcode;
+  }
+  return shortcode;
+}
+
+/** Downloads every slide of a carousel post. Meta's `ig_post` attachment only gives a
+ * lookaside.fbsbx.com link to the cover slide — to get the rest, rebuild the real
+ * instagram.com permalink from the media ID and let yt-dlp enumerate the full carousel
+ * (it exposes a multi-slide post as a playlist; the single-item resolver deliberately
+ * passes --no-playlist, which is exactly what was hiding the other slides). */
+export async function downloadCarouselMedia(mediaId: string): Promise<{ buffer: Buffer; contentType: string }[]> {
+  const permalink = `https://www.instagram.com/p/${mediaIdToShortcode(mediaId)}/`;
+  const res = await fetch(`${internalOrigin()}/api/resolve-reel?url=${encodeURIComponent(permalink)}&carousel=true`);
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`Failed to download carousel: ${res.status} ${detail.slice(0, 500)}`);
+  }
+
+  const { items } = (await res.json()) as { items: { contentType: string; dataBase64: string }[] };
+  console.log(`Downloaded carousel: ${items.length} slide(s) from ${permalink}`);
+
+  return items.map((item) => ({
+    buffer: Buffer.from(item.dataBase64, "base64"),
+    contentType: item.contentType,
+  }));
+}
+
 /** Sends a text reply back into the DM thread with the sender. */
 export async function sendTextMessage(recipientId: string, text: string, accessToken: string): Promise<void> {
   const res = await fetch(`${GRAPH_BASE}/me/messages?access_token=${encodeURIComponent(accessToken)}`, {

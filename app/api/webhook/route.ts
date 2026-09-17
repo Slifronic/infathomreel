@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
-import { verifySignature, downloadMedia, sendTextMessage, chunkMessage } from "@/lib/instagram";
-import { analyzeReel, formatAnalysis } from "@/lib/analyze";
+import { verifySignature, downloadMedia, downloadCarouselMedia, sendTextMessage, chunkMessage } from "@/lib/instagram";
+import { analyzeReel, formatAnalysis, type MediaItem } from "@/lib/analyze";
 import type { IgWebhookBody } from "@/lib/types";
 
 // Attachment types Meta has been observed sending for a DM'd Reel/post share.
@@ -66,8 +66,18 @@ async function processWebhook(body: IgWebhookBody) {
       try {
         await sendTextMessage(senderId, "Got it — analyzing now, one sec 🔎", accessToken);
 
-        const { buffer, contentType } = await downloadMedia(reelAttachment.payload.url);
-        const analysis = await analyzeReel(buffer, contentType);
+        // ig_post's payload.url is only the carousel's cover slide — for the full
+        // set, rebuild the real permalink from the media ID and let yt-dlp walk it.
+        let media: MediaItem[];
+        if (reelAttachment.type === "ig_post" && reelAttachment.payload.ig_post_media_id) {
+          const slides = await downloadCarouselMedia(reelAttachment.payload.ig_post_media_id);
+          media = slides.map((s) => ({ buffer: s.buffer, mediaType: s.contentType }));
+        } else {
+          const { buffer, contentType } = await downloadMedia(reelAttachment.payload.url);
+          media = [{ buffer, mediaType: contentType }];
+        }
+
+        const analysis = await analyzeReel(media);
         const reply = formatAnalysis(analysis);
 
         for (const chunk of chunkMessage(reply)) {

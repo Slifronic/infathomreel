@@ -4,6 +4,7 @@ export interface IgAttachment {
     url?: string;
     title?: string;
     reel_video_id?: string;
+    ig_post_media_id?: string;
   };
 }
 
