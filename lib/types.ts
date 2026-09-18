@@ -42,6 +42,7 @@ export interface ToolMention {
 
 export interface ReelAnalysis {
   summary: string;
+  keyPoints: string[];
   tools: ToolMention[];
   verdict: "real" | "fake" | "uncertain";
   confidence: number;

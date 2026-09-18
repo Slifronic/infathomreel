@@ -4,7 +4,12 @@ import { z } from "zod";
 import type { ReelAnalysis } from "./types";
 
 const analysisSchema = z.object({
-  summary: z.string().describe("1-2 plain sentences: what the content shows or claims. No commentary, no hooks, just what it is."),
+  summary: z.string().describe("2-4 plain sentences giving the full picture: what the content shows or claims, and how it's structured (e.g. a list, a step-by-step, a before/after). No commentary, no hooks, just what it is."),
+  keyPoints: z
+    .array(z.string())
+    .describe(
+      "Every distinct point, claim, step, or question the content raises, in the order presented — comprehensive, not just the headline point. This must include any question the video poses to the viewer (a literal question asked on-screen or in audio, a rhetorical hook meant to make them think, a quiz/poll prompt, 'have you tried X?', etc.) — write it out close to verbatim so nothing gets lost. One short skimmable line per point. Empty array only if the content genuinely makes just one single point already fully covered by the summary."
+    ),
   tools: z
     .array(
       z.object({
@@ -29,7 +34,7 @@ const analysisSchema = z.object({
   source: z
     .string()
     .describe(
-      "One sentence: what the verdict is based on — e.g. 'matches publicly documented behavior of this tool', 'no independent way to verify from the video alone', 'the demo shown doesn't match how this tool actually works'."
+      "1-3 sentences: what the verdict is based on, specifically — reference the actual things you saw or heard (e.g. 'the GitHub repo shown on-screen matches a real, actively maintained project', 'no independent way to verify the claimed results from the video alone', 'the demo shown doesn't match how this tool actually works — it doesn't support the feature claimed at 0:08'). Avoid generic one-liners when there's specific evidence to cite."
     ),
 });
 
@@ -68,11 +73,11 @@ export async function analyzeReel(media: MediaItem[]): Promise<ReelAnalysis> {
             text: [
               `You're analyzing an Instagram ${kindDescription} for someone who saves content about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.`,
               "",
-              "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, exactly where/how to actually go get it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
+              "Their actual need: a genuinely comprehensive breakdown of what the content covers (every point and question it raises, not just the headline one), the exact name of any tool/product featured well enough to search for and find it, exactly where/how to actually go get it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable, but do not skip or compress content to save space.",
               "",
               kind === "video"
-                ? "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name (and any link, @handle, repo, or 'link in bio' for it) can appear in one without the other."
-                : "Read every piece of on-screen text carefully across every slide — listicle graphics often pack many tool names into small labels or a numbered list, sometimes one item per slide, and links/handles are often shown in small text under or beside the tool name.",
+                ? "Watch the full video start to finish: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name (and any link, @handle, repo, or 'link in bio' for it) can appear in one without the other. Note every distinct point made and every question posed (literal or rhetorical) as you go, in order — don't stop at the first or most obvious one."
+                : "Read every piece of on-screen text carefully across every slide — listicle graphics often pack many tool names, points, or questions into small labels or a numbered list, sometimes one item per slide, and links/handles are often shown in small text under or beside the tool name.",
               "",
               "For every tool, actively look for a concrete way to find it — a URL, @handle, repo name, or 'link in bio' shown on screen or spoken out loud — and quote it exactly if one exists. Don't guess or invent one if it isn't actually there; in that case, point to the most specific real place it can be found instead (e.g. GitHub, the App Store, npm, the company's own site) plus the exact term to search.",
               "",
@@ -95,6 +100,11 @@ export async function analyzeReel(media: MediaItem[]): Promise<ReelAnalysis> {
 /** Formats the structured analysis into plain, skimmable text for Instagram DMs. */
 export function formatAnalysis(a: ReelAnalysis): string {
   const lines: string[] = [a.summary];
+
+  if (a.keyPoints.length > 0) {
+    lines.push("", "Key points:");
+    for (const point of a.keyPoints) lines.push(`• ${point}`);
+  }
 
   if (a.tools.length > 0) {
     lines.push("", "Tools:");
