@@ -10,10 +10,15 @@ const analysisSchema = z.object({
       z.object({
         name: z.string().describe("The specific, findable name of the tool, app, product, or skill — exact enough to search for and find it"),
         description: z.string().describe("One short phrase: what it does"),
+        whereToFind: z
+          .string()
+          .describe(
+            "Exactly how someone could go find and get this. If a URL, @handle, repo name, or 'link in bio' is shown on-screen or spoken in the audio, quote it verbatim. Otherwise name the specific platform it lives on (GitHub, Chrome Web Store, App Store, npm, a company's own site, a Claude Code skill/plugin, etc.) plus the exact search term to use. Never invent a URL or handle that isn't actually shown or stated."
+          ),
       })
     )
     .describe(
-      "Every specific tool, app, product, or skill named or shown — check on-screen text/UI/labels AND spoken audio (if present) independently, since a name can appear in one without the other. Empty array if it doesn't feature a specific tool/product."
+      "Every specific tool, app, product, or skill named or shown — check on-screen text/UI/labels AND spoken audio (if present) independently, since a name (and any link/handle/resource for it) can appear in one without the other. Empty array if it doesn't feature a specific tool/product."
     ),
   verdict: z
     .enum(["real", "fake", "uncertain"])
@@ -63,11 +68,13 @@ export async function analyzeReel(media: MediaItem[]): Promise<ReelAnalysis> {
             text: [
               `You're analyzing an Instagram ${kindDescription} for someone who saves content about tools/products (e.g. a Claude Code skill, an app, a piece of software) so they can find and use them later.`,
               "",
-              "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
+              "Their actual need: the exact name of any tool/product featured, well enough to search for and find it, exactly where/how to actually go get it, and whether it's real or fake/exaggerated. They are not interested in editorial commentary, tone, or entertainment value — keep this factual and skimmable.",
               "",
               kind === "video"
-                ? "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name can appear in one without the other."
-                : "Read every piece of on-screen text carefully across every slide — listicle graphics often pack many tool names into small labels or a numbered list, sometimes one item per slide.",
+                ? "Watch the full video: on-screen text/UI/captions and spoken audio are separate sources — check both independently, since a tool's name (and any link, @handle, repo, or 'link in bio' for it) can appear in one without the other."
+                : "Read every piece of on-screen text carefully across every slide — listicle graphics often pack many tool names into small labels or a numbered list, sometimes one item per slide, and links/handles are often shown in small text under or beside the tool name.",
+              "",
+              "For every tool, actively look for a concrete way to find it — a URL, @handle, repo name, or 'link in bio' shown on screen or spoken out loud — and quote it exactly if one exists. Don't guess or invent one if it isn't actually there; in that case, point to the most specific real place it can be found instead (e.g. GitHub, the App Store, npm, the company's own site) plus the exact term to search.",
               "",
               `If no specific tool or product is shown, return an empty tools array and set verdict/confidence/source based on whatever factual claim (if any) the ${kind} makes instead.`,
             ].join("\n"),
@@ -91,7 +98,10 @@ export function formatAnalysis(a: ReelAnalysis): string {
 
   if (a.tools.length > 0) {
     lines.push("", "Tools:");
-    for (const t of a.tools) lines.push(`• ${t.name} — ${t.description}`);
+    for (const t of a.tools) {
+      lines.push(`• ${t.name} — ${t.description}`);
+      lines.push(`  Find it: ${t.whereToFind}`);
+    }
   }
 
   const verdictLabel = { real: "Real", fake: "Fake", uncertain: "Uncertain" }[a.verdict];

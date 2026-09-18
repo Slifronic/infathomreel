@@ -37,6 +37,7 @@ export interface IgWebhookBody {
 export interface ToolMention {
   name: string;
   description: string;
+  whereToFind: string;
 }
 
 export interface ReelAnalysis {
