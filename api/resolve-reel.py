@@ -6,6 +6,12 @@ that page. yt-dlp is free, open-source, and actively maintained against
 exactly this kind of anti-bot hardening, so it's the reliable way to get the
 real file(s).
 
+Instagram now hard-blocks anonymous (logged-out) access outright ("You have
+exceeded the rate-limit for accessing posts anonymously") rather than just
+occasionally erroring — so yt-dlp needs real session cookies. IG_COOKIES_TXT
+holds a Netscape-format cookies.txt exported from a logged-in account; it's
+written to a temp file per-request and passed to yt-dlp via --cookies.
+
 Two modes:
 - Default (single item): a Reel or single-image post. Uses --no-playlist so
   a post doesn't accidentally pull in unrelated content.
@@ -30,6 +36,19 @@ import sys
 # URL back-to-back) — retry a few times before giving up.
 MAX_ATTEMPTS = 3
 RETRY_DELAY_SECONDS = 2
+
+IG_COOKIES_TXT = os.environ.get("IG_COOKIES_TXT")
+
+
+def _cookie_args(tmpdir: str) -> list[str]:
+    """Writes IG_COOKIES_TXT (if set) to a file in tmpdir and returns the
+    --cookies args for yt-dlp, or [] if no cookies are configured."""
+    if not IG_COOKIES_TXT:
+        return []
+    cookie_path = os.path.join(tmpdir, "cookies.txt")
+    with open(cookie_path, "w") as f:
+        f.write(IG_COOKIES_TXT)
+    return ["--cookies", cookie_path]
 
 
 class handler(BaseHTTPRequestHandler):
@@ -57,6 +76,7 @@ class handler(BaseHTTPRequestHandler):
                             sys.executable, "-m", "yt_dlp",
                             "-f", "best[ext=mp4]/best",
                             "--no-playlist",
+                            *_cookie_args(tmpdir),
                             "-o", out_path,
                             url,
                         ],
@@ -103,6 +123,7 @@ class handler(BaseHTTPRequestHandler):
                             # No --no-playlist here on purpose: a carousel post is
                             # exposed to yt-dlp as a playlist of its slides, and we
                             # want every slide, not just the first.
+                            *_cookie_args(tmpdir),
                             "-o", out_template,
                             url,
                         ],
